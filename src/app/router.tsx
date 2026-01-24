@@ -5,12 +5,13 @@ import { DashboardHome } from "./pages/dashboard/Home";
 import { DashboardInventory } from "./pages/dashboard/Inventory";
 import { DashboardLayout } from "./layouts/DashboardLayout";
 import { DashboardProducts } from "./pages/dashboard/Products";
+import { DashboardRegistrations } from "./pages/dashboard/Registrations";
 import { Login } from "./pages/auth/Login";
 
 export const router = createBrowserRouter([
     {
         path: "/",
-        element: <Navigate to="/auth/registrar" />,
+        element: <Navigate to="/auth/entrar" />,
     },
     {
         path: "/auth",
@@ -19,11 +20,7 @@ export const router = createBrowserRouter([
             {
                 path: "entrar",
                 element: <Login />,
-            },
-            {
-                path: "registrar",
-                element: <div>Register Page</div>,
-            },
+            }
         ]
     },
     {
@@ -45,6 +42,10 @@ export const router = createBrowserRouter([
             {
                 path: "inventario",
                 element: <DashboardInventory />
+            },
+            {
+                path: "cadastros",
+                element: <DashboardRegistrations />
             }
             ]
         },

@@ -94,7 +94,7 @@ export const Login = () => {
                     <Field>
                         <FieldLabel>Senha</FieldLabel>
                         <Input
-                            type="senha"
+                            type="password"
                             placeholder="Sua senha"
                             autoComplete="current-senha"
                             className="bg-white text-gray-900"

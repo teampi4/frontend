@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import perfil from "/src/assets/profile.png";
 import {
@@ -15,21 +15,12 @@ import {
 } from "lucide-react";
 import { getAuth, logout } from "@/hooks/auth/useAuth";
 import { toast } from "sonner";
-import { z } from "zod";
-import { Controller, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { httpClient } from "@/lib/http/axios";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { SidebarAdminDialogs } from "@/components/layout/SidebarAdminDialogs";
+import { companySchema, userSchema, type CompanyValues, type UserValues } from "@/components/layout/sidebar-admin-dialogs.schema";
+import { SidebarProfileDialog, type ProfileFormValues } from "@/components/layout/SidebarProfileDialog";
 
 
 export const Sidebar = () => {
@@ -43,33 +34,9 @@ export const Sidebar = () => {
     );
     const [companiesLoading, setCompaniesLoading] = useState(false);
     const { usuario } = getAuth();
-
-    const companySchema = z.object({
-        cnpj: z.string().min(1, "Informe o CNPJ."),
-        razao_social: z.string().min(1, "Informe a razão social."),
-        nome_fantasia: z.string().min(1, "Informe o nome fantasia."),
-        telefone: z.string().min(1, "Informe o telefone."),
-        email: z.string().email("Email inválido."),
-        cep: z.string().min(1, "Informe o CEP."),
-        logradouro: z.string().min(1, "Informe o logradouro."),
-        numero: z.string().min(1, "Informe o número."),
-        complemento: z.string().optional(),
-        bairro: z.string().min(1, "Informe o bairro."),
-        cidade: z.string().min(1, "Informe a cidade."),
-        estado: z.string().min(1, "Informe o estado.").max(2, "Apenas a sigla."),
-        logo_url: z.string().optional(),
-    });
-
-    const userSchema = z.object({
-        login: z.string().min(1, "Informe o login."),
-        nome: z.string().min(1, "Informe o nome."),
-        perfil: z.string().min(1, "Informe o perfil."),
-        id_empresa: z.string().min(1, "Informe o ID da empresa."),
-        senha: z.string().min(3, "A senha deve ter pelo menos 3 caracteres."),
-    });
-
-    type CompanyValues = z.infer<typeof companySchema>;
-    type UserValues = z.infer<typeof userSchema>;
+    const [currentUser, setCurrentUser] = useState(usuario);
+    const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
+    const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
 
     const companyForm = useForm<CompanyValues>({
         resolver: zodResolver(companySchema),
@@ -106,7 +73,7 @@ export const Sidebar = () => {
             setCompaniesLoading(true);
             const { data } = await httpClient.get<
                 Array<{ id: string; nome_fantasia: string; razao_social: string }>
-            >("/empresas");
+            >("/empresas/ativos");
             setCompanies(data ?? []);
             if (data?.length && !userForm.getValues("id_empresa")) {
                 userForm.setValue("id_empresa", data[0].id);
@@ -153,25 +120,133 @@ export const Sidebar = () => {
         }
     }, [isUserDialogOpen, lastCompanyId, loadCompanies, userForm]);
     const navItems = [
-        { label: "Início", icon: Home, action: () => navigate('/dashboard/inicio') },
-        { label: "Inventário", icon: Package, action: () => navigate('/dashboard/inventario') },
-        { label: "Produção", icon: Factory, action: () => navigate('/dashboard/producao') },
-        { label: "Produtos e serviços", icon: Boxes, action: () => navigate('/dashboard/produtos') },
-        { label: "Vendas", icon: ShoppingCart, action: () => navigate('/dashboard/vendas') },
-        { label: "Finanças", icon: Wallet, action: () => navigate('/dashboard/financas') },
-        { label: "Cadastros", icon: Users, action: () => navigate('/dashboard/cadastros') },
-        { label: "Relatórios", icon: BarChart3, action: () => navigate('/dashboard/relatorios') },
+        { label: "Início", icon: Home, action: () => navigate("/dashboard/inicio") },
+        { label: "Inventário", icon: Package, action: () => navigate("/dashboard/inventario") },
+        { label: "Produção", icon: Factory, action: () => navigate("/dashboard/producao") },
+        { label: "Produtos e serviços", icon: Boxes, action: () => navigate("/dashboard/produtos") },
+        { label: "Vendas", icon: ShoppingCart, action: () => navigate("/dashboard/vendas") },
+        { label: "Finanças", icon: Wallet, action: () => navigate("/dashboard/financas") },
+        { label: "Cadastros", icon: Users, action: () => navigate("/dashboard/cadastros") },
+        { label: "Relatórios", icon: BarChart3, action: () => navigate("/dashboard/relatorios") },
     ];
 
-    const isAdmin = (usuario?.perfil ?? "").toLowerCase().includes("admin");
-    const userName = usuario?.nome ?? usuario?.login ?? "Usuário";
+    const userRole = (currentUser?.perfil ?? "").toLowerCase();
+    const isAdmin = useMemo(() => userRole.includes("admin"), [userRole]);
+    const userName = currentUser?.nome ?? currentUser?.login ?? "Usuário";
     const userInitial = userName.trim().charAt(0).toUpperCase() || "U";
+    const filteredNavItems = useMemo(() => {
+        if (userRole.includes("gerente")) {
+            return navItems;
+        }
+        if (userRole.includes("operador")) {
+            return navItems.filter((item) =>
+                ["Início", "Inventário", "Produção", "Produtos e serviços"].includes(item.label),
+            );
+        }
+        if (userRole.includes("vendedor")) {
+            return navItems.filter((item) =>
+                ["Início", "Produtos e serviços", "Vendas"].includes(item.label),
+            );
+        }
+        return navItems.filter((item) => item.label === "Início");
+    }, [navItems, userRole]);
+    const profileForm = useForm<ProfileFormValues>({
+        defaultValues: {
+            login: currentUser?.login ?? "",
+            nome: currentUser?.nome ?? "",
+            senha: "",
+        },
+    });
+
+    useEffect(() => {
+        if (!currentUser?.id_empresa) {
+            setCompanyLogoUrl(null);
+            return;
+        }
+
+        let isMounted = true;
+        const loadCompanyLogo = async () => {
+            try {
+                const { data } = await httpClient.get<{ logo_url?: string }>(`/empresas/${currentUser.id_empresa}`);
+                if (isMounted) {
+                    setCompanyLogoUrl(data?.logo_url ?? null);
+                }
+            } catch (err: unknown) {
+                console.error("Erro ao carregar logo da empresa:", err);
+                if (isMounted) {
+                    setCompanyLogoUrl(null);
+                }
+            }
+        };
+
+        loadCompanyLogo();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [currentUser?.id_empresa]);
 
 
     const handleLogout = () => {
         logout();
         setIsUserMenuOpen(false);
         navigate("/auth/entrar");
+    };
+
+    const handleOpenProfileDialog = () => {
+        if (!currentUser) return;
+        profileForm.reset({
+            login: currentUser.login ?? "",
+            nome: currentUser.nome ?? "",
+            senha: "",
+        });
+        setIsProfileDialogOpen(true);
+        setIsUserMenuOpen(false);
+    };
+
+    const handleUpdateProfile = async (values: ProfileFormValues) => {
+        if (!currentUser) return;
+        try {
+            const payload: Record<string, unknown> = {
+                login: values.login,
+                nome: values.nome,
+                perfil: currentUser.perfil,
+                id_empresa: currentUser.id_empresa ?? null,
+            };
+
+            if (values.senha.trim()) {
+                payload.senha = values.senha;
+            }
+
+            await httpClient.put(`/usuarios/${currentUser.id}`, payload);
+            toast.success("Perfil atualizado com sucesso.");
+            const updatedUser = {
+                ...currentUser,
+                login: values.login,
+                nome: values.nome,
+            };
+            localStorage.setItem("usuario", JSON.stringify(updatedUser));
+            setCurrentUser(updatedUser);
+            setIsProfileDialogOpen(false);
+        } catch (err: unknown) {
+            console.error("Erro ao atualizar perfil:", err);
+            toast.error("Não foi possível atualizar o perfil.");
+        }
+    };
+
+    const handleDeleteProfile = async () => {
+        if (!currentUser) return;
+        const confirmed = window.confirm("Tem certeza que deseja excluir seu perfil?");
+        if (!confirmed) return;
+
+        try {
+            await httpClient.delete(`/usuarios/${currentUser.id}`);
+            toast.success("Perfil excluído com sucesso.");
+            handleLogout();
+        } catch (err: unknown) {
+            console.error("Erro ao excluir perfil:", err);
+            toast.error("Não foi possível excluir o perfil.");
+        }
     };
 
     const handleSubmitCompany = async (values: CompanyValues) => {
@@ -233,11 +308,11 @@ export const Sidebar = () => {
     return (
         <aside className="w-20 h-screen flex flex-col items-center py-6">
             <div className='border-b pb-4 w-full flex justify-center mb-4'>
-                <img src={perfil} alt="perfil" />
+                <img src={companyLogoUrl || perfil} alt="logo" className="h-10 w-10 object-contain" />
             </div>
             {!isAdmin &&
                 <nav className="flex flex-col gap-6">
-                    {navItems.map(({ label, icon: Icon, action}) => (
+                    {filteredNavItems.map(({ label, icon: Icon, action }) => (
                     <button
                         key={label}
                         className="
@@ -305,6 +380,20 @@ export const Sidebar = () => {
                     <div className="absolute bottom-12 left-1/2 -translate-x-1/2 bg-white border shadow-md rounded-md">
                         <button
                             type="button"
+                            onClick={handleOpenProfileDialog}
+                            className="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-center"
+                        >
+                            Editar perfil
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleDeleteProfile}
+                            className="w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-center"
+                        >
+                            Excluir perfil
+                        </button>
+                        <button
+                            type="button"
                             onClick={handleLogout}
                             className="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-center"
                         >
@@ -316,327 +405,40 @@ export const Sidebar = () => {
 
             {isAdmin && (
                 <>
-                    <Dialog
-                        open={isCompanyDialogOpen}
-                        onOpenChange={(open) => {
+                    <SidebarAdminDialogs
+                        isCompanyDialogOpen={isCompanyDialogOpen}
+                        isUserDialogOpen={isUserDialogOpen}
+                        onCompanyDialogChange={(open) => {
                             setIsCompanyDialogOpen(open);
                             if (!open) {
                                 companyForm.reset();
                             }
                         }}
-                    >
-                        <DialogContent className="h-[90vh] max-h-[90vh] overflow-y-auto sm:w-[600px]">
-                            <DialogHeader>
-                                <DialogTitle>Cadastrar empresa</DialogTitle>
-                                <DialogDescription>
-                                    Informe os dados da empresa.
-                                </DialogDescription>
-                            </DialogHeader>
-
-                            <form
-                                className="space-y-6"
-                                onSubmit={companyForm.handleSubmit(handleSubmitCompany)}
-                            >
-                                <FieldGroup className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                    <Controller
-                                        control={companyForm.control}
-                                        name="cnpj"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>CNPJ</FieldLabel>
-                                                <Input
-                                                    {...field}
-                                                    inputMode="numeric"
-                                                    maxLength={18}
-                                                    placeholder="00.000.000/0000-00"
-                                                    aria-invalid={fieldState.invalid}
-                                                    onChange={(event) => field.onChange(formatCnpj(event.target.value))}
-                                                />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <Controller
-                                        control={companyForm.control}
-                                        name="razao_social"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>Razão social</FieldLabel>
-                                                <Input {...field} aria-invalid={fieldState.invalid} />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <Controller
-                                        control={companyForm.control}
-                                        name="nome_fantasia"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>Nome fantasia</FieldLabel>
-                                                <Input {...field} aria-invalid={fieldState.invalid} />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <Controller
-                                        control={companyForm.control}
-                                        name="telefone"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>Telefone</FieldLabel>
-                                                <Input
-                                                    {...field}
-                                                    inputMode="numeric"
-                                                    maxLength={15}
-                                                    placeholder="(00) 00000-0000"
-                                                    aria-invalid={fieldState.invalid}
-                                                    onChange={(event) => field.onChange(formatTelefone(event.target.value))}
-                                                />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <Controller
-                                        control={companyForm.control}
-                                        name="email"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>Email</FieldLabel>
-                                                <Input type="email" {...field} aria-invalid={fieldState.invalid} />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <Controller
-                                        control={companyForm.control}
-                                        name="cep"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>CEP</FieldLabel>
-                                                <Input
-                                                    {...field}
-                                                    inputMode="numeric"
-                                                    maxLength={9}
-                                                    placeholder="00000-000"
-                                                    aria-invalid={fieldState.invalid}
-                                                    onChange={(event) => field.onChange(formatCep(event.target.value))}
-                                                />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <Controller
-                                        control={companyForm.control}
-                                        name="logradouro"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>Logradouro</FieldLabel>
-                                                <Input {...field} aria-invalid={fieldState.invalid} />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <Controller
-                                        control={companyForm.control}
-                                        name="numero"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>Número</FieldLabel>
-                                                <Input {...field} aria-invalid={fieldState.invalid} />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <Controller
-                                        control={companyForm.control}
-                                        name="complemento"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>Complemento</FieldLabel>
-                                                <Input {...field} aria-invalid={fieldState.invalid} />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <Controller
-                                        control={companyForm.control}
-                                        name="bairro"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>Bairro</FieldLabel>
-                                                <Input {...field} aria-invalid={fieldState.invalid} />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <Controller
-                                        control={companyForm.control}
-                                        name="cidade"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>Cidade</FieldLabel>
-                                                <Input {...field} aria-invalid={fieldState.invalid} />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <Controller
-                                        control={companyForm.control}
-                                        name="estado"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>Estado</FieldLabel>
-                                                <Input {...field} aria-invalid={fieldState.invalid} />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <div className="sm:col-span-2">
-                                        <Controller
-                                            control={companyForm.control}
-                                            name="logo_url"
-                                            render={({ field, fieldState }) => (
-                                                <Field>
-                                                    <FieldLabel>Logo URL</FieldLabel>
-                                                    <Input {...field} aria-invalid={fieldState.invalid} />
-                                                    {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                                </Field>
-                                            )}
-                                        />
-                                    </div>
-                                </FieldGroup>
-
-                                <DialogFooter className="pt-2">
-                                    <Button type="button" variant="outline" onClick={() => setIsCompanyDialogOpen(false)}>
-                                        Cancelar
-                                    </Button>
-                                    <Button
-                                        type="submit"
-                                        className="bg-[#2A64E8] cursor-pointer hover:bg-[#2A64E8]"
-                                        disabled={companyForm.formState.isSubmitting}
-                                    >
-                                        Cadastrar empresa
-                                    </Button>
-                                </DialogFooter>
-                            </form>
-                        </DialogContent>
-                    </Dialog>
-
-                    <Dialog
-                        open={isUserDialogOpen}
-                        onOpenChange={(open) => {
+                        onUserDialogChange={(open) => {
                             setIsUserDialogOpen(open);
                             if (!open) {
                                 userForm.reset({ id_empresa: lastCompanyId ?? "" });
                             }
                         }}
-                    >
-                        <DialogContent className="sm:w-[520px]">
-                            <DialogHeader>
-                                <DialogTitle>Cadastrar usuário</DialogTitle>
-                                <DialogDescription>
-                                    Informe os dados do usuário.
-                                </DialogDescription>
-                            </DialogHeader>
-
-                            <form
-                                className="space-y-6"
-                                onSubmit={userForm.handleSubmit(handleSubmitUser)}
-                            >
-                                <FieldGroup className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                    <div className="sm:col-span-2">
-                                        <Controller
-                                            control={userForm.control}
-                                            name="login"
-                                            render={({ field, fieldState }) => (
-                                                <Field>
-                                                    <FieldLabel>Login</FieldLabel>
-                                                    <Input {...field} aria-invalid={fieldState.invalid} />
-                                                    {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                                </Field>
-                                            )}
-                                        />
-                                    </div>
-                                    <Controller
-                                        control={userForm.control}
-                                        name="nome"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>Nome</FieldLabel>
-                                                <Input {...field} aria-invalid={fieldState.invalid} />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <Controller
-                                        control={userForm.control}
-                                        name="perfil"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>Perfil</FieldLabel>
-                                                <Input {...field} aria-invalid={fieldState.invalid} />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <Controller
-                                        control={userForm.control}
-                                        name="id_empresa"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>ID da empresa</FieldLabel>
-                                                <select
-                                                    value={field.value}
-                                                    onChange={field.onChange}
-                                                    onBlur={field.onBlur}
-                                                    ref={field.ref}
-                                                    disabled={companiesLoading}
-                                                    aria-invalid={fieldState.invalid}
-                                                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                                                >
-                                                    <option value="" disabled>
-                                                        {companiesLoading ? "Carregando empresas..." : "Selecione uma empresa"}
-                                                    </option>
-                                                    {companies.map((company) => (
-                                                        <option key={company.id} value={company.id}>
-                                                            {company.nome_fantasia || company.razao_social}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                    <Controller
-                                        control={userForm.control}
-                                        name="senha"
-                                        render={({ field, fieldState }) => (
-                                            <Field>
-                                                <FieldLabel>Senha</FieldLabel>
-                                                <Input type="password" {...field} aria-invalid={fieldState.invalid} />
-                                                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                                            </Field>
-                                        )}
-                                    />
-                                </FieldGroup>
-
-                                <DialogFooter className="pt-2">
-                                    <Button type="button" variant="outline" onClick={() => setIsUserDialogOpen(false)}>
-                                        Cancelar
-                                    </Button>
-                                    <Button
-                                        type="submit"
-                                        className="bg-[#2A64E8] cursor-pointer hover:bg-[#2A64E8]"
-                                        disabled={userForm.formState.isSubmitting}
-                                    >
-                                        Cadastrar usuário
-                                    </Button>
-                                </DialogFooter>
-                            </form>
-                        </DialogContent>
-                    </Dialog>
+                        companyForm={companyForm}
+                        userForm={userForm}
+                        companies={companies}
+                        companiesLoading={companiesLoading}
+                        onSubmitCompany={handleSubmitCompany}
+                        onSubmitUser={handleSubmitUser}
+                        formatCep={formatCep}
+                        formatCnpj={formatCnpj}
+                        formatTelefone={formatTelefone}
+                    />
                 </>
             )}
+
+            <SidebarProfileDialog
+                open={isProfileDialogOpen}
+                onOpenChange={setIsProfileDialogOpen}
+                form={profileForm}
+                onSubmit={handleUpdateProfile}
+            />
         </aside>
     );
 }
