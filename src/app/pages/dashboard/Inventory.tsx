@@ -1,9 +1,11 @@
 import { useHeader } from "@/hooks/useHeader";
 import { ChevronDown, Plus,  LayoutGrid, Search, Bell, CircleQuestionMark } from "lucide-react";
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 export const DashboardInventory = () => {
     const { setHeader } = useHeader();
+    const navigate = useNavigate();
 
     useEffect(() => {
         setHeader({
@@ -43,8 +45,8 @@ export const DashboardInventory = () => {
             {
                 type: "button",
                 label: "Novo Produto",
-                icon: <Plus className="h-4 w-4" />,
-                onClick: () => {},
+                icon: <Plus className="h-4 w-4" />, 
+                onClick: () => navigate("/dashboard/inventario/adicionar-estoque"),
                 variant: "success",
             },
             {

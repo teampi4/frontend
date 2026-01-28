@@ -24,5 +24,34 @@ export const userSchema = z.object({
     senha: z.string().min(3, "A senha deve ter pelo menos 3 caracteres."),
 });
 
+export const clientSchema = z.object({
+    tipo_pessoa: z.enum(["PF", "PJ"]),
+    cpf_cnpj: z.string().min(1, "Informe CPF/CNPJ."),
+    razao_social: z.string().optional(),
+    nome_fantasia: z.string().optional(),
+    contato_nome: z.string().optional(),
+    telefone: z.string().optional(),
+    celular: z.string().optional(),
+    email: z.string().email("Email inválido.").optional().or(z.literal("")),
+    cep: z.string().optional(),
+    logradouro: z.string().optional(),
+    numero: z.string().optional(),
+    complemento: z.string().optional(),
+    bairro: z.string().optional(),
+    cidade: z.string().optional(),
+    estado: z.string().max(2, "Apenas a sigla.").optional(),
+    observacoes: z.string().optional(),
+    ativo: z.boolean().optional(),
+}).refine((data) => {
+    if (data.tipo_pessoa === "PJ") {
+        return !!(data.razao_social && data.razao_social.trim().length > 0);
+    }
+    return true;
+}, {
+    message: "Informe a razão social para pessoa jurídica.",
+    path: ["razao_social"],
+});
+
 export type CompanyValues = z.infer<typeof companySchema>;
 export type UserValues = z.infer<typeof userSchema>;
+export type ClientValues = z.infer<typeof clientSchema>;

@@ -7,6 +7,7 @@ import { DashboardLayout } from "./layouts/DashboardLayout";
 import { DashboardProducts } from "./pages/dashboard/Products";
 import { DashboardRegistrations } from "./pages/dashboard/Registrations";
 import { Login } from "./pages/auth/Login";
+import { AddEstoquePage } from "./pages/dashboard/AddEstoquePage";
 
 export const router = createBrowserRouter([
     {
@@ -46,6 +47,10 @@ export const router = createBrowserRouter([
             {
                 path: "cadastros",
                 element: <DashboardRegistrations />
+            },
+            {
+                path: "inventario/adicionar-estoque",
+                element: <AddEstoquePage />
             }
             ]
         },
