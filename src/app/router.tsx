@@ -11,6 +11,8 @@ import { DashboardRegistrations } from "./pages/dashboard/Registrations";
 import { Login } from "./pages/auth/Login";
 import { AddEstoquePage } from "./pages/dashboard/AddEstoquePage";
 import { DashboardSales } from "./pages/dashboard/Sales";
+import { Formulas } from "./pages/dashboard/Formulas";
+import { ClientesUsuarios } from "./pages/dashboard/ClientesUsuarios";
 
 export const router = createBrowserRouter([
     {
@@ -66,7 +68,15 @@ export const router = createBrowserRouter([
             {
                 path: "inventario/adicionar-estoque",
                 element: <AddEstoquePage />
-            }
+            },
+            {
+                path: "formulas",
+                element: <Formulas />            
+            },
+            {
+                path: "clientes-usuarios",
+                element: <ClientesUsuarios />,
+            },
             ]
         },
 

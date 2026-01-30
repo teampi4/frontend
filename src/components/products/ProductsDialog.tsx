@@ -194,6 +194,8 @@ export const ProductsDialog = ({
                   <Field>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
+                        id={field.name}
+                        name={field.name}
                         type="checkbox"
                         checked={field.value ?? true}
                         onChange={(e) => field.onChange(e.target.checked)}

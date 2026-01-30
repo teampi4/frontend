@@ -12,15 +12,20 @@ import {
   CircleQuestionMark,
   Filter,
   Pencil,
+  Play,
   Plus,
   Search,
   Trash2,
   X,
 } from "lucide-react";
 import { producaoApi } from "@/app/features/producao/api/producao.api";
+import { insumosApi } from "@/app/features/insumos/api/insumos.api";
+import { productItemsApi } from "@/app/features/product-items/api/product-items.api";
+import { movimentacoesApi } from "@/app/features/movimentacoes/api/movimentacoes.api";
 import { producaoSchema, type ProducaoFormValues } from "@/app/features/producao/producao.schema";
 import type { EstoqueProducao } from "@/app/features/producao/types";
 import { ProducaoDialog } from "@/components/producao/ProducaoDialog";
+import { ExecutarProducaoDialog } from "@/components/producao/ExecutarProducaoDialog";
 import {
   Dialog,
   DialogContent,
@@ -92,7 +97,9 @@ export const DashboardProducao = () => {
   const { usuario } = getAuth();
   const [producoes, setProducoes] = useState<EstoqueProducao[]>([]);
   const [producoesLoading, setProducoesLoading] = useState(false);
+  const [insumosList, setInsumosList] = useState<{ id: string; nome: string; unidade_medida: string }[]>([]);
   const [isProducaoDialogOpen, setIsProducaoDialogOpen] = useState(false);
+  const [isExecutarDialogOpen, setIsExecutarDialogOpen] = useState(false);
   const [editingProducao, setEditingProducao] = useState<EstoqueProducao | null>(null);
   const [producaoToDelete, setProducaoToDelete] = useState<EstoqueProducao | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -124,9 +131,29 @@ export const DashboardProducao = () => {
     }
   }, [usuario?.id_empresa]);
 
+  const loadInsumos = useCallback(async () => {
+    if (!usuario?.id_empresa) return;
+    try {
+      const { data } = await insumosApi.listByEmpresa(String(usuario.id_empresa));
+      setInsumosList(
+        (data ?? []).map((i) => ({
+          id: i.id,
+          nome: i.nome,
+          unidade_medida: i.unidade_medida,
+        }))
+      );
+    } catch (err: unknown) {
+      console.error("Erro ao carregar insumos:", err);
+    }
+  }, [usuario?.id_empresa]);
+
   useEffect(() => {
     loadProducoes();
   }, [loadProducoes]);
+
+  useEffect(() => {
+    loadInsumos();
+  }, [loadInsumos]);
 
   useEffect(() => {
     const hasEmpresa = !!usuario?.id_empresa;
@@ -135,11 +162,12 @@ export const DashboardProducao = () => {
       pathPage: ["Início", "Produção"].join(" > "),
       actions: hasEmpresa
         ? [
-            { type: "node", node: <input className="h-10 w-64 rounded-md px-3 text-sm bg-white" placeholder="Procurar produções..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /> },
+            { type: "node", node: <input id="producao-search" name="producao-search" type="search" autoComplete="off" className="h-10 w-64 rounded-md px-3 text-sm bg-white" placeholder="Procurar produções..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /> },
             { type: "button", label: "Buscar", icon: <Search className="h-4 w-4" />, variant: "primary", onClick: () => loadProducoes() },
             { type: "button", label: "Filtrar", icon: <Filter className="h-4 w-4" />, variant: showFilters ? "secondary" : "primary", onClick: () => setShowFilters((p) => !p) },
             { type: "button", label: "Mais ações", icon: <ChevronDown className="h-4 w-4" />, variant: "primary", onClick: () => {} },
             { type: "button", label: "Nova Produção", icon: <Plus className="h-4 w-4" />, onClick: () => { setEditingProducao(null); producaoForm.reset(defaultProducaoValues); setIsProducaoDialogOpen(true); }, variant: "success" },
+            { type: "button", label: "Produzir", icon: <Play className="h-4 w-4" />, onClick: () => setIsExecutarDialogOpen(true), variant: "secondary" },
             { type: "button", label: "", icon: <Bell className="h-6 w-6" />, variant: "transparent", onClick: () => {} },
             { type: "button", label: "", icon: <CircleQuestionMark className="h-6 w-6" />, variant: "transparent", onClick: () => {} },
           ]
@@ -182,6 +210,7 @@ export const DashboardProducao = () => {
         descricao: values.descricao || null,
         custo_producao: values.custo_producao,
         id_empresa: usuario.id_empresa,
+        ativo: values.ativo ?? true,
       });
       if (data) setProducoes((prev) => [data, ...prev]);
       toast.success("Produção cadastrada com sucesso.");
@@ -208,13 +237,50 @@ export const DashboardProducao = () => {
 
   const handleRequestDeleteProducao = (producao: EstoqueProducao) => setProducaoToDelete(producao);
 
-  const handleConfirmDeleteProducao = async () => {
-    if (!producaoToDelete) return;
+  const handleConfirmDeleteProducao = async (devolverInsumos: boolean) => {
+    if (!producaoToDelete || !usuario?.id_empresa) return;
     try {
       setIsDeleting(true);
+      if (devolverInsumos) {
+        const { data: lotes } = await productItemsApi.listByEstoqueProducao(producaoToDelete.id);
+        const { data: movimentacoes } = await movimentacoesApi.listByEmpresa(String(usuario.id_empresa), { limit: 10000 });
+        const movs = movimentacoes ?? [];
+        const saidasJaDevolvidas = new Set<string>();
+        const lotesComEntrada = (lotes ?? [])
+          .map((lot) => {
+            const entrada = movs.find(
+              (m) =>
+                m.id_item_estoque_producao === lot.id &&
+                m.tipo_operacao === "entrada" &&
+                (m.motivo === "Produção finalizada" || m.motivo === "Produção")
+            );
+            return { lot, entrada };
+          })
+          .filter((x): x is { lot: (typeof lotes)[0]; entrada: NonNullable<typeof movs[0]> } => !!x.entrada)
+          .sort((a, b) => new Date(a.entrada.data_movimentacao).getTime() - new Date(b.entrada.data_movimentacao).getTime());
+        for (const { lot, entrada } of lotesComEntrada) {
+          const tEntrada = new Date(entrada.data_movimentacao).getTime();
+          const janelaMs = 15000;
+          const saidasInsumo = movs.filter(
+            (m) =>
+              !saidasJaDevolvidas.has(m.id) &&
+              m.tipo_estoque === "insumo" &&
+              m.tipo_operacao === "saida" &&
+              m.motivo === "Produção" &&
+              m.id_item_estoque_insumo &&
+              (tEntrada - janelaMs <= new Date(m.data_movimentacao).getTime() && new Date(m.data_movimentacao).getTime() <= tEntrada + 1000)
+          );
+          for (const saida of saidasInsumo) {
+            if (!saida.id_item_estoque_insumo) continue;
+            saidasJaDevolvidas.add(saida.id);
+            const { data: item } = await productItemsApi.getInsumoById(saida.id_item_estoque_insumo);
+            if (item) await productItemsApi.updateInsumo(item.id, { quantidade: item.quantidade + saida.quantidade });
+          }
+        }
+      }
       await producaoApi.delete(producaoToDelete.id);
       setProducoes((prev) => prev.filter((p) => p.id !== producaoToDelete.id));
-      toast.success("Produção excluída com sucesso.");
+      toast.success(devolverInsumos ? "Produção excluída e insumos devolvidos ao estoque." : "Produção excluída com sucesso.");
       setProducaoToDelete(null);
     } catch (err: unknown) {
       console.error("Erro ao excluir produção:", err);
@@ -338,7 +404,7 @@ export const DashboardProducao = () => {
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-slate-900">Produção</h2>
-          <p className="text-sm text-slate-500">Lista de produções cadastradas na empresa.</p>
+          <p className="text-sm text-slate-500">Produtos que sua empresa produz. Cadastre aqui; defina a fórmula em Fórmulas; depois use Executar Produção para gerar estoque.</p>
         </div>
         {producoesLoading ? (
           <div className="text-sm text-slate-500">Carregando produções...</div>
@@ -391,6 +457,19 @@ export const DashboardProducao = () => {
 
       <ProducaoDialog open={isProducaoDialogOpen} onOpenChange={(o) => { setIsProducaoDialogOpen(o); if (!o) setEditingProducao(null); }} form={producaoForm} onSubmit={handleProducaoSubmit} editingProducao={editingProducao} />
 
+      <ExecutarProducaoDialog
+        open={isExecutarDialogOpen}
+        onOpenChange={setIsExecutarDialogOpen}
+        producoes={producoes}
+        insumos={insumosList}
+        idEmpresa={String(usuario?.id_empresa ?? "")}
+        idUsuario={String(usuario?.id ?? "")}
+        onSuccess={() => {
+          loadProducoes();
+          toast.success("Produção executada. Insumos consumidos e estoque do produto atualizado.");
+        }}
+      />
+
       <Dialog open={!!producaoToDelete} onOpenChange={(o) => !o && setProducaoToDelete(null)}>
         <DialogContent className="sm:max-w-md gap-6">
           <DialogHeader className="space-y-3">
@@ -398,10 +477,12 @@ export const DashboardProducao = () => {
             <DialogDescription className="leading-relaxed">
               Tem certeza que deseja excluir a produção <span className="font-medium text-slate-900">{producaoToDelete?.nome}</span>? Esta ação não pode ser desfeita.
             </DialogDescription>
+            <p className="text-sm font-medium text-slate-700 pt-1">Deseja que os insumos utilizados nesta produção voltem ao estoque?</p>
           </DialogHeader>
-          <DialogFooter className="gap-3 pt-2">
-            <Button variant="outline" onClick={() => setProducaoToDelete(null)}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleConfirmDeleteProducao} disabled={isDeleting}>{isDeleting ? "Excluindo..." : "Excluir"}</Button>
+          <DialogFooter className="gap-3 pt-2 flex-wrap sm:flex-nowrap">
+            <Button variant="outline" onClick={() => setProducaoToDelete(null)} disabled={isDeleting}>Cancelar</Button>
+            <Button variant="default" onClick={() => handleConfirmDeleteProducao(true)} disabled={isDeleting}>{isDeleting ? "Excluindo..." : "Sim, devolver insumos"}</Button>
+            <Button variant="destructive" onClick={() => handleConfirmDeleteProducao(false)} disabled={isDeleting}>{isDeleting ? "Excluindo..." : "Não, apenas excluir"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

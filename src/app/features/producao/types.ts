@@ -17,6 +17,7 @@ export type EstoqueProducaoCreate = {
   descricao?: string | null;
   custo_producao: number;
   id_empresa: string;
+  ativo?: boolean;
 };
 
 export type EstoqueProducaoUpdate = {

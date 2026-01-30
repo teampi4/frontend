@@ -13,6 +13,8 @@ import {
   UserPlus,
   Building2,
   FlaskConical,
+  ScrollText,
+  UserCircle,
 } from "lucide-react";
 import { getAuth, logout } from "@/hooks/auth/useAuth";
 import { toast } from "sonner";
@@ -124,11 +126,13 @@ export const Sidebar = () => {
         { label: "Início", icon: Home, action: () => navigate("/dashboard/inicio") },
         { label: "Inventário", icon: Package, action: () => navigate("/dashboard/inventario") },
         { label: "Insumos", icon: FlaskConical, action: () => navigate("/dashboard/insumos") },
+        { label: "Fórmulas", icon: ScrollText, action: () => navigate("/dashboard/formulas") },
         { label: "Produção", icon: Factory, action: () => navigate("/dashboard/producao") },
-        { label: "Produtos e serviços", icon: Boxes, action: () => navigate("/dashboard/produtos") },
+        { label: "Produtos", icon: Boxes, action: () => navigate("/dashboard/produtos") },
         { label: "Vendas", icon: ShoppingCart, action: () => navigate("/dashboard/vendas") },
         { label: "Finanças", icon: Wallet, action: () => navigate("/dashboard/financas") },
         { label: "Cadastros", icon: Users, action: () => navigate("/dashboard/cadastros") },
+        { label: "Clientes e usuários", icon: UserCircle, action: () => navigate("/dashboard/clientes-usuarios") },
         { label: "Relatórios", icon: BarChart3, action: () => navigate("/dashboard/relatorios") },
     ];
 
@@ -142,12 +146,12 @@ export const Sidebar = () => {
         }
         if (userRole.includes("operador")) {
             return navItems.filter((item) =>
-                ["Início", "Inventário", "Insumos", "Produção", "Produtos e serviços"].includes(item.label),
+                ["Início", "Inventário", "Insumos", "Fórmulas", "Produção", "Produtos e serviços"].includes(item.label),
             );
         }
         if (userRole.includes("vendedor")) {
             return navItems.filter((item) =>
-                ["Início", "Produtos e serviços", "Vendas"].includes(item.label),
+                ["Início", "Produtos", "Vendas"].includes(item.label),
             );
         }
         return navItems.filter((item) => item.label === "Início");

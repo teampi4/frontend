@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ import {
   ChevronUp,
   CircleQuestionMark,
   Filter,
+  List,
   Pencil,
   Plus,
   Search,
@@ -19,7 +20,7 @@ import {
 } from "lucide-react";
 import { salesApi } from "@/app/features/sales/api/sales.api";
 import { saleUpdateSchema, type SaleUpdateFormValues } from "@/app/features/sales/sales.schema";
-import type { Venda } from "@/app/features/sales/types";
+import type { Venda, VendaWithItens } from "@/app/features/sales/types";
 import { SalesDialog } from "@/components/sales/SalesDialog";
 import { CreateSaleDialog } from "@/components/sales/CreateSaleDialog";
 import {
@@ -39,12 +40,14 @@ const formatCurrency = (value: number) =>
     currency: "BRL",
   }).format(value);
 
-const formatDate = (dateStr: string) =>
-  new Date(dateStr).toLocaleDateString("pt-BR", {
+const formatDate = (dateStr: string) => {
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? "" : d.toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
+};
 
 const formatDateTimeLocal = (dateStr: string) => {
   const d = new Date(dateStr);
@@ -74,13 +77,7 @@ const STATUS_LABELS: Record<string, string> = {
   cancelada: "Cancelada",
 };
 
-type SortColumn =
-  | "numero_venda"
-  | "data_venda"
-  | "status"
-  | "valor_total"
-  | "valor_liquido"
-  | "data_cadastro";
+type SortColumn = "numero_venda" | "data_venda" | "cliente" | "valor_total" | "status";
 type SortDirection = "asc" | "desc";
 
 type SaleFilters = {
@@ -117,9 +114,12 @@ export const DashboardSales = () => {
   const [salesLoading, setSalesLoading] = useState(false);
   const [isSaleDialogOpen, setIsSaleDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [editingSale, setEditingSale] = useState<Venda | null>(null);
+  const [editingSale, setEditingSale] = useState<VendaWithItens | null>(null);
   const [saleToDelete, setSaleToDelete] = useState<Venda | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
+  const [expandedSaleDetails, setExpandedSaleDetails] = useState<VendaWithItens | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<SaleFilters>(defaultFilters);
@@ -127,8 +127,8 @@ export const DashboardSales = () => {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [clientes, setClientes] = useState<Array<{ id: string; nome_fantasia?: string; razao_social?: string }>>([]);
   const [formasPagamento, setFormasPagamento] = useState<Array<{ id: string; tipo: string; descricao?: string }>>([]);
-  const [clientesLoading, setClientesLoading] = useState(false);
   const [formasLoading, setFormasLoading] = useState(false);
+  const [clientesLoading, setClientesLoading] = useState(false);
 
   const saleForm = useForm<SaleUpdateFormValues>({
     resolver: zodResolver(saleUpdateSchema),
@@ -185,6 +185,10 @@ export const DashboardSales = () => {
   }, [loadSales]);
 
   useEffect(() => {
+    if (usuario?.id_empresa) loadClientes();
+  }, [usuario?.id_empresa, loadClientes]);
+
+  useEffect(() => {
     const hasEmpresa = !!usuario?.id_empresa;
     setHeader({
       pageName: "Vendas",
@@ -195,6 +199,10 @@ export const DashboardSales = () => {
               type: "node",
               node: (
                 <input
+                  id="sales-search"
+                  name="sales-search"
+                  type="search"
+                  autoComplete="off"
                   className="h-10 w-64 rounded-md px-3 text-sm bg-white"
                   placeholder="Procurar vendas..."
                   value={searchQuery}
@@ -259,22 +267,26 @@ export const DashboardSales = () => {
       });
   }, [setHeader, searchQuery, loadSales, usuario?.id_empresa, showFilters]);
 
+  const getClienteNome = (idCliente: string) => {
+    const c = clientes.find((x) => x.id === idCliente);
+    return c ? (c.nome_fantasia || c.razao_social || idCliente) : idCliente;
+  };
+
   const handleSaleSubmit = async (values: SaleUpdateFormValues) => {
     if (!editingSale) return;
     try {
-      const { data } = await salesApi.update(editingSale.id, {
+      const payload: Parameters<typeof salesApi.update>[1] = {
         numero_venda: values.numero_venda,
         data_venda: values.data_venda,
         status: values.status,
-        id_cliente: values.id_cliente,
-        id_forma_pagamento: values.id_forma_pagamento,
         parcelas: values.parcelas,
         desconto: values.desconto,
-        observacoes: values.observacoes || null,
-      });
-      if (data) {
-        setSales((prev) => prev.map((s) => (s.id === data.id ? data : s)));
-      }
+        observacoes: values.observacoes?.trim() || null,
+      };
+      if (values.id_cliente?.trim()) payload.id_cliente = values.id_cliente.trim();
+      if (values.id_forma_pagamento?.trim()) payload.id_forma_pagamento = values.id_forma_pagamento.trim();
+      await salesApi.update(editingSale.id, payload);
+      await loadSales();
       toast.success("Venda atualizada com sucesso.");
       saleForm.reset(defaultSaleFormValues);
       setEditingSale(null);
@@ -285,21 +297,52 @@ export const DashboardSales = () => {
     }
   };
 
-  const handleEditSale = (sale: Venda) => {
+  const loadSaleDetails = useCallback(async (saleId: string) => {
+    try {
+      setDetailsLoading(true);
+      const { data } = await salesApi.getById(saleId);
+      setExpandedSaleDetails(data ?? null);
+    } catch (err) {
+      console.error("Erro ao carregar detalhes da venda:", err);
+      toast.error("Não foi possível carregar os itens da venda.");
+      setExpandedSaleDetails(null);
+    } finally {
+      setDetailsLoading(false);
+    }
+  }, []);
+
+  const toggleExpandSale = (saleId: string) => {
+    if (expandedSaleId === saleId) {
+      setExpandedSaleId(null);
+      setExpandedSaleDetails(null);
+    } else {
+      setExpandedSaleId(saleId);
+      loadSaleDetails(saleId);
+    }
+  };
+
+  const handleEditSale = async (sale: Venda) => {
     loadClientes();
     loadFormasPagamento();
-    setEditingSale(sale);
-    saleForm.reset({
-      numero_venda: sale.numero_venda,
-      data_venda: formatDateTimeLocal(sale.data_venda),
-      status: sale.status,
-      id_cliente: sale.id_cliente,
-      id_forma_pagamento: sale.id_forma_pagamento,
-      parcelas: sale.parcelas,
-      desconto: sale.desconto,
-      observacoes: sale.observacoes ?? "",
-    });
-    setIsSaleDialogOpen(true);
+    try {
+      const { data } = await salesApi.getById(sale.id);
+      const full = data ?? { ...sale, itens: [] };
+      setEditingSale(full);
+      saleForm.reset({
+        numero_venda: full.numero_venda,
+        data_venda: formatDateTimeLocal(full.data_venda),
+        status: full.status,
+        id_cliente: full.id_cliente,
+        id_forma_pagamento: full.id_forma_pagamento,
+        parcelas: full.parcelas,
+        desconto: full.desconto,
+        observacoes: full.observacoes ?? "",
+      });
+      setIsSaleDialogOpen(true);
+    } catch (err) {
+      console.error("Erro ao carregar venda:", err);
+      toast.error("Não foi possível carregar a venda para edição.");
+    }
   };
 
   const handleRequestDeleteSale = (sale: Venda) => {
@@ -361,27 +404,18 @@ export const DashboardSales = () => {
     if (sortColumn) {
       result.sort((a, b) => {
         let cmp = 0;
-        switch (sortColumn) {
-          case "numero_venda":
-            cmp = a.numero_venda.localeCompare(b.numero_venda);
-            break;
-          case "data_venda":
-            cmp = new Date(a.data_venda).getTime() - new Date(b.data_venda).getTime();
-            break;
-          case "status":
-            cmp = a.status.localeCompare(b.status);
-            break;
-          case "valor_total":
-            cmp = a.valor_total - b.valor_total;
-            break;
-          case "valor_liquido":
-            cmp = a.valor_liquido - b.valor_liquido;
-            break;
-          case "data_cadastro":
-            cmp = new Date(a.data_cadastro).getTime() - new Date(b.data_cadastro).getTime();
-            break;
-          default:
-            break;
+        if (sortColumn === "numero_venda") {
+          cmp = a.numero_venda.localeCompare(b.numero_venda);
+        } else if (sortColumn === "data_venda") {
+          cmp = new Date(a.data_venda).getTime() - new Date(b.data_venda).getTime();
+        } else if (sortColumn === "cliente") {
+          const nomeA = getClienteNome(a.id_cliente).toLowerCase();
+          const nomeB = getClienteNome(b.id_cliente).toLowerCase();
+          cmp = nomeA.localeCompare(nomeB);
+        } else if (sortColumn === "valor_total") {
+          cmp = a.valor_total - b.valor_total;
+        } else if (sortColumn === "status") {
+          cmp = a.status.localeCompare(b.status);
         }
         return sortDirection === "asc" ? cmp : -cmp;
       });
@@ -553,19 +587,21 @@ export const DashboardSales = () => {
               <thead className="border-b border-slate-200 text-left text-slate-500">
                 <tr>
                   <SortableHeader column="numero_venda" label="Número" />
-                  <SortableHeader column="data_venda" label="Data venda" />
-                  <SortableHeader column="status" label="Status" />
+                  <SortableHeader column="data_venda" label="Data da venda" />
+                  <SortableHeader column="cliente" label="Cliente" />
                   <SortableHeader column="valor_total" label="Valor total" />
-                  <SortableHeader column="valor_liquido" label="Valor líquido" />
-                  <SortableHeader column="data_cadastro" label="Cadastro" />
+                  <SortableHeader column="status" label="Status" />
                   <th className="py-3 pr-4 pl-4 font-medium text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredAndSortedSales.map((sale) => (
-                  <tr key={sale.id} className="text-slate-700">
+                  <Fragment key={sale.id}>
+                  <tr className="text-slate-700">
                     <td className="py-2 pr-4 font-mono text-xs">{sale.numero_venda}</td>
-                    <td className="py-2 pr-4 text-slate-500">{formatDate(sale.data_venda)}</td>
+                    <td className="py-2 pr-4 text-slate-600">{formatDate(sale.data_venda)}</td>
+                    <td className="py-2 pr-4">{getClienteNome(sale.id_cliente)}</td>
+                    <td className="py-2 pr-4 font-medium">{formatCurrency(sale.valor_total)}</td>
                     <td className="py-2 pr-4">
                       <span
                         className={
@@ -579,13 +615,19 @@ export const DashboardSales = () => {
                         {STATUS_LABELS[sale.status] || sale.status}
                       </span>
                     </td>
-                    <td className="py-2 pr-4">{formatCurrency(sale.valor_total)}</td>
-                    <td className="py-2 pr-4">{formatCurrency(sale.valor_liquido)}</td>
-                    <td className="py-2 pr-4 text-slate-500">
-                      {formatDate(sale.data_cadastro)}
-                    </td>
                     <td className="py-3 pr-4 pl-4 text-right">
-                      <div className="flex justify-end gap-3">
+                      <div className="flex justify-end gap-3 flex-wrap">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleExpandSale(sale.id)}
+                          className="h-8 px-3"
+                          title="Ver itens"
+                        >
+                          <List className="h-4 w-4 mr-1" />
+                          Ver itens
+                        </Button>
                         <Button
                           type="button"
                           variant="outline"
@@ -609,6 +651,61 @@ export const DashboardSales = () => {
                       </div>
                     </td>
                   </tr>
+                  {expandedSaleId === sale.id && (
+                    <tr key={`${sale.id}-details`}>
+                      <td colSpan={6} className="bg-slate-50 p-4">
+                        {detailsLoading ? (
+                          <div className="text-sm text-slate-500">Carregando itens...</div>
+                        ) : expandedSaleDetails?.id === sale.id ? (
+                          <div className="space-y-3">
+                            <h4 className="text-sm font-medium text-slate-700">Itens da venda</h4>
+                            <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+                              <table className="min-w-full text-sm">
+                                <thead className="border-b border-slate-200 bg-slate-100 text-left text-slate-600">
+                                  <tr>
+                                    <th className="py-2 px-3">Qtd</th>
+                                    <th className="py-2 px-3">Preço unit.</th>
+                                    <th className="py-2 px-3">Desconto</th>
+                                    <th className="py-2 px-3">Valor total</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {(expandedSaleDetails.itens ?? []).map((item) => (
+                                    <tr key={item.id}>
+                                      <td className="py-2 px-3">{item.quantidade}</td>
+                                      <td className="py-2 px-3">{formatCurrency(item.preco_unitario)}</td>
+                                      <td className="py-2 px-3">{formatCurrency(item.desconto)}</td>
+                                      <td className="py-2 px-3 font-medium">{formatCurrency(item.valor_total)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            <div className="flex gap-6 text-sm flex-wrap">
+                              <span className="text-slate-600">
+                                <strong>Valor total:</strong> {formatCurrency(expandedSaleDetails.valor_total)}
+                              </span>
+                              <span className="text-slate-600">
+                                <strong>Desconto venda:</strong> {formatCurrency(expandedSaleDetails.desconto)}
+                              </span>
+                              <span className="text-slate-700 font-medium">
+                                <strong>Valor líquido:</strong> {formatCurrency(expandedSaleDetails.valor_liquido)}
+                              </span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => toggleExpandSale(sale.id)}
+                            >
+                              Fechar
+                            </Button>
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -626,9 +723,18 @@ export const DashboardSales = () => {
         onSubmit={handleSaleSubmit}
         editingSale={editingSale}
         clientes={clientes}
-        formasPagamento={formasPagamento}
         clientesLoading={clientesLoading}
+        formasPagamento={formasPagamento}
         formasLoading={formasLoading}
+        idEmpresa={usuario?.id_empresa ?? ""}
+        idUsuario={usuario?.id ?? ""}
+        onItensUpdated={() => {
+          if (editingSale?.id) {
+            salesApi.getById(editingSale.id).then(({ data }) => {
+              if (data) setEditingSale(data);
+            });
+          }
+        }}
       />
 
       <CreateSaleDialog
@@ -639,10 +745,10 @@ export const DashboardSales = () => {
           toast.success("Venda criada com sucesso.");
         }}
         idEmpresa={usuario?.id_empresa ?? ""}
+        idUsuario={usuario?.id ?? ""}
         clientes={clientes}
         formasPagamento={formasPagamento}
         clientesLoading={clientesLoading}
-        formasLoading={formasLoading}
       />
 
       <Dialog

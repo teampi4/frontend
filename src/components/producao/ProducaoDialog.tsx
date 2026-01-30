@@ -50,9 +50,9 @@ export const ProducaoDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:w-[520px] gap-6">
         <DialogHeader className="space-y-2">
-          <DialogTitle>{isEdit ? "Editar produção" : "Cadastrar produção"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Editar produto (a produzir)" : "Cadastrar produto (a produzir)"}</DialogTitle>
           <DialogDescription className="leading-relaxed">
-            {isEdit ? "Atualize os dados da produção." : "Informe os dados da produção."}
+            {isEdit ? "Atualize os dados do produto que sua empresa produz." : "Produto que sua empresa produz. Depois defina a fórmula em Fórmulas e execute a produção para gerar estoque."}
           </DialogDescription>
         </DialogHeader>
 
@@ -144,28 +144,28 @@ export const ProducaoDialog = ({
                 )}
               />
             </div>
-            {isEdit && (
-              <div className="sm:col-span-2">
-                <Controller
-                  control={form.control}
-                  name="ativo"
-                  render={({ field }) => (
-                    <Field>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={field.value ?? true}
-                          onChange={(e) => field.onChange(e.target.checked)}
-                          onBlur={field.onBlur}
-                          className="rounded border-input"
-                        />
-                        <span className="text-sm">Produção ativa</span>
-                      </label>
-                    </Field>
-                  )}
-                />
-              </div>
-            )}
+            <div className="sm:col-span-2">
+              <Controller
+                control={form.control}
+                name="ativo"
+                render={({ field }) => (
+                  <Field>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        id={field.name}
+                        name={field.name}
+                        type="checkbox"
+                        checked={field.value ?? true}
+                        onChange={(e) => field.onChange(e.target.checked)}
+                        onBlur={field.onBlur}
+                        className="rounded border-input"
+                      />
+                      <span className="text-sm">Produção ativa</span>
+                    </label>
+                  </Field>
+                )}
+              />
+            </div>
           </FieldGroup>
 
           <DialogFooter className="gap-3 pt-4">

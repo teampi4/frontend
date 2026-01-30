@@ -137,7 +137,7 @@ export const DashboardInsumos = () => {
       pathPage: ["Início", "Insumos"].join(" > "),
       actions: hasEmpresa
         ? [
-            { type: "node", node: <input className="h-10 w-64 rounded-md px-3 text-sm bg-white" placeholder="Procurar insumos..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /> },
+            { type: "node", node: <input id="insumos-search" name="insumos-search" type="search" autoComplete="off" className="h-10 w-64 rounded-md px-3 text-sm bg-white" placeholder="Procurar insumos..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /> },
             { type: "button", label: "Buscar", icon: <Search className="h-4 w-4" />, variant: "primary", onClick: () => loadInsumos() },
             { type: "button", label: "Filtrar", icon: <Filter className="h-4 w-4" />, variant: showFilters ? "secondary" : "primary", onClick: () => setShowFilters((p) => !p) },
             { type: "button", label: "Mais ações", icon: <ChevronDown className="h-4 w-4" />, variant: "primary", onClick: () => {} },
@@ -344,7 +344,7 @@ export const DashboardInsumos = () => {
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-slate-900">Insumos</h2>
-          <p className="text-sm text-slate-500">Lista de insumos cadastrados na empresa.</p>
+          <p className="text-sm text-slate-500">Matérias-primas (ingredientes, embalagens, etc.). Tudo tem estoque.</p>
         </div>
         {insumosLoading ? (
           <div className="text-sm text-slate-500">Carregando insumos...</div>

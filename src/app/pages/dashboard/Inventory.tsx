@@ -360,6 +360,10 @@ export const DashboardInventory = () => {
           type: "node",
           node: (
             <input
+              id="inventory-search"
+              name="inventory-search"
+              type="search"
+              autoComplete="off"
               className="h-10 w-64 rounded-md px-3 text-sm bg-white"
               placeholder="Procurar..."
             />

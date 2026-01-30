@@ -145,6 +145,10 @@ export const DashboardProducts = () => {
           type: "node",
           node: (
             <input
+              id="products-search"
+              name="products-search"
+              type="search"
+              autoComplete="off"
               className="h-10 w-64 rounded-md px-3 text-sm bg-white"
               placeholder="Procurar Produtos..."
               value={searchQuery}
@@ -282,11 +286,40 @@ export const DashboardProducts = () => {
     setProductToDelete(product);
   };
 
+  const productUsedInConfirmedSale = useCallback(async (idEmpresa: string, productId: string): Promise<boolean> => {
+    try {
+      const { data: vendas } = await salesApi.listByEmpresa(idEmpresa);
+      const confirmed = (vendas ?? []).filter((v) => v.status === "confirmada");
+      const lotIds = new Set<string>();
+      for (const v of confirmed) {
+        const { data: full } = await salesApi.getById(v.id);
+        if (full?.itens) for (const item of full.itens) lotIds.add(item.id_item_estoque_produto);
+      }
+      for (const lotId of lotIds) {
+        const { data: lot } = await productItemsApi.getById(lotId);
+        if (lot?.id_estoque_produto === productId) return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const handleConfirmDeleteProduct = async () => {
     if (!productToDelete) return;
+    if (!usuario?.id_empresa) {
+      toast.error("Empresa não identificada.");
+      return;
+    }
 
     try {
       setIsDeleting(true);
+      const used = await productUsedInConfirmedSale(usuario.id_empresa, productToDelete.id);
+      if (used) {
+        toast.error("Não é possível excluir este produto: ele está vinculado a uma ou mais vendas confirmadas.");
+        setIsDeleting(false);
+        return;
+      }
       await productsApi.delete(productToDelete.id);
       setProducts((prev) => prev.filter((p) => p.id !== productToDelete.id));
       toast.success("Produto excluído com sucesso.");
@@ -567,7 +600,7 @@ export const DashboardProducts = () => {
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-slate-900">Produtos</h2>
           <p className="text-sm text-slate-500">
-            Lista de produtos cadastrados na empresa.
+            Produtos vendíveis. O que aparece na venda e o cliente compra.
           </p>
         </div>
         {productsLoading ? (

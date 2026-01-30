@@ -1,3 +1,15 @@
+export type ItemVendaRead = {
+  id: string;
+  id_venda: string;
+  id_item_estoque_produto: string;
+  quantidade: number;
+  preco_unitario: number;
+  desconto: number;
+  valor_total: number;
+  observacao?: string | null;
+  data_cadastro: string;
+};
+
 export type Venda = {
   id: string;
   numero_venda: string;
@@ -13,6 +25,8 @@ export type Venda = {
   valor_liquido: number;
   data_cadastro: string;
 };
+
+export type VendaWithItens = Venda & { itens: ItemVendaRead[] };
 
 export type ClienteResumo = {
   id: string;
