@@ -142,7 +142,7 @@ export const DashboardRegistrations = () => {
                 cpf_cnpj: values.cpf_cnpj,
                 razao_social: values.razao_social || null,
                 nome_fantasia: values.nome_fantasia || null,
-                contato_nome: values.contato_nome || null,
+                contato_nome: values.contato_nome ?? "",
                 telefone: values.telefone || null,
                 celular: values.celular || null,
                 email: values.email || null,

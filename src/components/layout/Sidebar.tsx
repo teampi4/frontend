@@ -12,6 +12,7 @@ import {
   BarChart3,
   UserPlus,
   Building2,
+  FlaskConical,
 } from "lucide-react";
 import { getAuth, logout } from "@/hooks/auth/useAuth";
 import { toast } from "sonner";
@@ -122,6 +123,7 @@ export const Sidebar = () => {
     const navItems = [
         { label: "Início", icon: Home, action: () => navigate("/dashboard/inicio") },
         { label: "Inventário", icon: Package, action: () => navigate("/dashboard/inventario") },
+        { label: "Insumos", icon: FlaskConical, action: () => navigate("/dashboard/insumos") },
         { label: "Produção", icon: Factory, action: () => navigate("/dashboard/producao") },
         { label: "Produtos e serviços", icon: Boxes, action: () => navigate("/dashboard/produtos") },
         { label: "Vendas", icon: ShoppingCart, action: () => navigate("/dashboard/vendas") },
@@ -140,7 +142,7 @@ export const Sidebar = () => {
         }
         if (userRole.includes("operador")) {
             return navItems.filter((item) =>
-                ["Início", "Inventário", "Produção", "Produtos e serviços"].includes(item.label),
+                ["Início", "Inventário", "Insumos", "Produção", "Produtos e serviços"].includes(item.label),
             );
         }
         if (userRole.includes("vendedor")) {

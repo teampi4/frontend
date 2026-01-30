@@ -5,9 +5,12 @@ import { DashboardHome } from "./pages/dashboard/Home";
 import { DashboardInventory } from "./pages/dashboard/Inventory";
 import { DashboardLayout } from "./layouts/DashboardLayout";
 import { DashboardProducts } from "./pages/dashboard/Products";
+import { DashboardInsumos } from "./pages/dashboard/Insumos";
+import { DashboardProducao } from "./pages/dashboard/Producao";
 import { DashboardRegistrations } from "./pages/dashboard/Registrations";
 import { Login } from "./pages/auth/Login";
 import { AddEstoquePage } from "./pages/dashboard/AddEstoquePage";
+import { DashboardSales } from "./pages/dashboard/Sales";
 
 export const router = createBrowserRouter([
     {
@@ -37,12 +40,24 @@ export const router = createBrowserRouter([
                 
             },
             {
-                path: "inicio/produtos",
-                element: <DashboardProducts />
+                path: "produtos",
+                element: <DashboardProducts />,
+            },
+            {
+                path: "vendas",
+                element: <DashboardSales />,
             },
             {
                 path: "inventario",
                 element: <DashboardInventory />
+            },
+            {
+                path: "insumos",
+                element: <DashboardInsumos />
+            },
+            {
+                path: "producao",
+                element: <DashboardProducao />
             },
             {
                 path: "cadastros",
